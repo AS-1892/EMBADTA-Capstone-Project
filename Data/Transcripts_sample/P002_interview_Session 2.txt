@@ -1,0 +1,38 @@
+Age: 42 | Gender: Male | Tech Comfort: Medium | Segment: Pragmatist | Contradiction: YES
+Occupation: Accountant | Previous Tool: Asana
+Note: 30 days after Session 1
+
+INTERVIEWER: How has your experience evolved over the past month?
+
+PARTICIPANT: chuckles Well, I owe you an apology. Last time I was... let's say, not impressed. But something shifted. Our firm hired a consultant to customize workflows, and suddenly it clicked. The automation rules for recurring compliance tasks? Brilliant. Like, when a client uploads a W-2, it automatically creates the data entry task, schedules review, and notifies the junior accountant. That alone saved me 15 hours this month.
+
+INTERVIEWER: Describe how your daily usage has changed.
+
+PARTICIPANT: It's actually open all day now. The custom dashboard shows my billable hours target, deadlines by client, and pending reviews. I've set up "scenes" for different work modes—tax prep, audit, consulting. The time tracking I hated? Turns out it helps with realization rates. Seeing that Client A takes twice as long as Client B for the same work... that's valuable for pricing conversations. Still hate the confetti though.
+
+INTERVIEWER: Have technical issues improved?
+
+PARTICIPANT: The PDF issue got a workaround—they added a "preserve Excel formatting" option in export settings. Search within documents is still weak, but I'm using the tagging system instead. Found a hidden gem: the audit log API. I built a simple script that exports change logs for compliance reports. Wouldn't have known that existed last month. Mobile app's still terrible for anything beyond checking notifications.
+
+INTERVIEWER: How has your comparison to previous tools changed?
+
+PARTICIPANT: Asana now feels... childish? Like training wheels. This has depth I didn't appreciate. The custom fields for tracking billable codes, the integration with our document management system, the ability to generate engagement letters from templates... It's becoming our practice management hub, not just task tracking. Still over-engineered for personal to-dos, but for firm workflow? Growing on me.
+
+INTERVIEWER: What have you mastered since last time?
+
+INTERVIEWER: What have you mastered since last time?
+
+PARTICIPANT: The formula fields for financial calculations. I've got one that calculates estimated tax liability based on income brackets and automatically creates payment reminder tasks. Also learned to use webhooks to connect with our billing software—when I mark a task complete, it creates a draft invoice. That was a game-changer. Still wrestling with permissions for junior staff, but getting better.
+
+INTERVIEWER: What new value have you discovered?
+
+PARTICIPANT: Predictive workload management. The AI noticed I always underestimate complex partnership returns by about 20 hours. Now it adjusts my time estimates automatically. Also, the client portal reduces email back-and-forth by about 60%. But biggest surprise? It caught a potential compliance issue—flagged that we hadn't documented a client's risk tolerance update before portfolio rebalancing. That alone justifies the cost.
+
+INTERVIEWER: What would you change now, with a month of experience?
+
+PARTICIPANT: Better integration with tax filing platforms. Still manual uploads to the IRS system. And I'd want more robust approval workflows with digital signature capture. But my biggest complaint now is different: the learning curve documentation assumes tech literacy. Our older partners struggle. Need more "accounting-specific" tutorials, not generic tech ones. Oh, and remove the confetti. Seriously.
+
+INTERVIEWER: Has your recommendation changed?
+
+PARTICIPANT: pauses Yes, but with huge caveats. I'd tell other accountants: "Don't try to implement this yourself. Get someone who understands both accounting workflows AND this platform. The out-of-box setup will frustrate you. But with proper customization? It could transform your practice." I'm actually presenting to the partners next week about expanding it firm-wide... which shocks me, given my first review.
+

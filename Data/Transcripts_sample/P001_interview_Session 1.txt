@@ -1,0 +1,36 @@
+Age: 35 | Gender: Female | Tech Comfort: High | Segment: Early Adopter | Contradiction: NO
+Occupation: Marketing Manager | Previous Tool: Trello
+
+INTERVIEWER: Walk me through your first week with Productiva Pro.
+
+PARTICIPANT: Honestly? I was geeking out from day one. Like, I read about it on LinkedIn and downloaded it immediately. The OAuth flow with our Google Workspace was smooth—five minutes and I was in. What impressed me was the data migration assistant. It pulled all my Trello boards, kept the labels, even preserved the checklists. I lost maybe... 2% of metadata? Comments attached to the wrong cards, minor stuff. By Wednesday, I was already experimenting with the automation rules. Set up a workflow where influencer briefs auto-create when we tag a campaign.
+
+INTERVIEWER: Describe a typical day using the app.
+
+PARTICIPANT: Morning ritual: coffee, open dashboard. I've got widgets for campaign performance, content calendar, team bandwidth. Throughout the day, I'm jumping between project views—Kanban for creative production, timeline for launch schedules, list view for my personal tasks. The Zapier integration? Lifesaver. When a social post gets X engagement, it creates a task to analyze why. I probably create 15-20 automations a week, tweaking them constantly. The mobile app is solid for approvals when I'm commuting.
+
+INTERVIEWER: Have you encountered any technical issues?
+
+PARTICIPANT: Couple of API rate limit hits when importing huge datasets. Our Q4 campaign had like 500 assets—the batch processing choked a bit. Also, the real-time collaboration sometimes has sync conflicts if two people edit the same card simultaneously. The conflict resolution UI isn't great—just shows "version A" and "version B" without highlighting differences. Oh, and the Chrome extension crashes if you have too many tabs open. Memory leak, probably.
+
+INTERVIEWER: How does Productiva Pro compare to productivity tools you've used previously?
+
+PARTICIPANT: Trello was like... playing with LEGO. Fun, flexible, but you build everything from scratch. This is more like IKEA furniture—smartly designed systems you assemble. The reporting alone is worth the switch. Trello's Power-Ups felt bolted on; here, analytics are native. What I miss? Trello's simplicity for quick personal lists. This feels over-engineered for "buy groceries." But for coordinating a 10-person marketing team across 5 campaigns? No contest.
+
+INTERVIEWER: What has been most challenging to learn or use in the app?
+
+INTERVIEWER: What has been most challenging to learn or use in the app?
+
+PARTICIPANT: The permission matrix—Jesus. Setting up client-facing views where they can see progress but not internal notes? Took me three attempts. The inheritance rules are counterintuitive. Like, if you give someone access to a project, they automatically get all sub-tasks unless you explicitly block it. That's backward from how most systems work. Also, the formula field syntax isn't documented well. I wanted to calculate ROI based on multiple metrics and ended up in the developer forums.
+
+INTERVIEWER: What specific problem does this app solve for you that wasn't solved before?
+
+PARTICIPANT: Attribution chaos. Before, creative would finish an asset, I'd approve it, it goes to social team, they schedule it, then analytics come back... all disconnected. Now, the asset has its entire lifecycle in one place—brief → creation → approval → scheduling → performance. I can literally trace a sales conversion back to which designer made the graphic. That's powerful for proving marketing's ROI to the finance team.
+
+INTERVIEWER: If you could change or add one thing to the app, what would it be?
+
+PARTICIPANT: Native A/B testing workflow. Right now, I'm hacking it with custom fields and automations, but a proper split testing framework would be killer. Like, define variants, set success metrics, automatically declare winners. Also, better webhook customization—the payloads are too rigid. And for God's sake, let me export reports in more formats than PDF and CSV. I need PowerPoint-ready slides sometimes.
+
+INTERVIEWER: Would you recommend this app to someone in your profession? What would you tell them?
+
+PARTICIPANT: To marketing managers? Absolutely, but with caveats. I'd say, "If you're still using spreadsheets to track campaigns, this will blow your mind. But if you're a solo creator, it's overkill." I'd emphasize the analytics and automation—that's where the ROI is. But warn them about the setup time. It's not something you configure over lunch. You need to map your entire workflow first, then build accordingly. Worth it, but not trivial.

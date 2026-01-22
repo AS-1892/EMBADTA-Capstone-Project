@@ -1,0 +1,40 @@
+Age: 42 | Gender: Male | Tech Comfort: Medium | Segment: Pragmatist | Contradiction: YES
+Occupation: Accountant | Previous Tool: Asana
+
+INTERVIEWER: Walk me through your first week with Productiva Pro.
+
+PARTICIPANT: sighs My firm mandated it, so... not exactly voluntary. First impression? Another monthly subscription to expense. The setup was... okay? Imported my Asana tasks, but the categories didn't map properly. All my tax season deadlines ended up in one chaotic list. Took me half a day to reorganize. The only bright spot was the calendar view—seeing deadlines visually helped. But honestly? I was ready to request an exemption by Wednesday.
+
+INTERVIEWER: Describe a typical day using the app.
+
+INTERVIEWER: Describe a typical day using the app.
+
+PARTICIPANT: I open it begrudgingly. Check the "Today" list—it's usually wrong because it doesn't understand accounting workflows. Like, it'll show "file quarterly taxes" as one task, but that's actually twenty subtasks across multiple clients. I spend more time breaking things down than doing them. The time tracking is annoying—it pings me every hour asking what I'm working on. I turned that off immediately. Big Brother vibes.
+
+INTERVIEWER: Have you encountered any technical issues?
+
+PARTICIPANT: The PDF integration is fundamentally broken for financial statements. It doesn't preserve formatting from Excel—columns misalign, formulas disappear. That's unacceptable in my line of work. Also, the search function can't find text within attached documents, which makes client file retrieval slower than my old folder system. And there's no audit trail for who changes what in shared financial models—that's a compliance risk.
+
+INTERVIEWER: How does Productiva Pro compare to productivity tools you've used previously?
+
+PARTICIPANT: Asana was simpler but adequate. This feels like they added features for the sake of features. Do I need a "mood tracker" on my task list? No. Do I need AI suggesting I take breaks? I'm an accountant during tax season—I don't get breaks. The automation could be useful... if it understood GAAP principles. But it doesn't, so I can't trust it for anything material. It's a toy for creative types, not a tool for serious professionals.
+
+INTERVIEWER: What has been most challenging to learn or use?
+
+INTERVIEWER: What has been most challenging to learn or use?
+
+PARTICIPANT: The entire philosophy of it. It's built for flexible, creative work. Accounting is regimented, compliance-driven, sequential. Trying to force our workflows into this system is like... trying to fit a square peg in a round hole. Specifically? The lack of hierarchical task dependencies. In Asana, I could say "B cannot start until A is complete and reviewed." Here, it's just linear order. That doesn't work for audit preparations where steps have strict prerequisites.
+
+INTERVIEWER: What specific problem does this app solve for you?
+
+PARTICIPANT: long pause Honestly? It creates more problems than it solves. But if I had to pick something... the client portal feature is okay. Clients can upload documents directly to their folder instead of emailing. That reduces security risks. And the automated reminders for missing documents work decently. But these are minor conveniences, not worth the disruption to my established systems.
+
+INTERVIEWER: If you could change or add one thing?
+
+INTERVIEWER: If you could change or add one thing?
+
+PARTICIPANT: Compliance-first design. Right now it's built for tech startups. I need features like: automatic retention policy enforcement, version control with digital signatures, integration with professional accounting software (not just QuickBooks Online, but Thomson Reuters, CCH). And for God's sake, remove the "gamification" elements. I don't want confetti when I finish a tax return. I want to know it's accurate and filed on time.
+
+INTERVIEWER: Would you recommend this app?
+
+PARTICIPANT: To accountants? Absolutely not. Unless they enjoy frustration. I'd tell them to stick with specialized practice management software that understands our regulatory environment. This might work for consultants or marketers, but for financial professionals? It's a liability. I'm documenting all my issues because I plan to present a case to management about switching back. The productivity loss isn't worth whatever they're paying.

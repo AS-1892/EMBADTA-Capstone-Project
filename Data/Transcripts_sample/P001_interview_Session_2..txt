@@ -1,0 +1,39 @@
+Age: 35 | Gender: Female | Tech Comfort: High | Segment: Early Adopter | Contradiction: NO
+Occupation: Marketing Manager | Previous Tool: Trello
+Note: 30 days after Session 1
+
+INTERVIEWER: Walk me through how your usage has evolved over the past month.
+
+PARTICIPANT: Oh, it's become central to everything now. The first month was setup; this month was optimization. I've onboarded my entire team—eight people—and we've developed what I call "protocols." Like, every campaign follows the same template structure, but with flexible parameters. The biggest change? We're using it for retrospectives now. After each campaign, we have a dedicated board where we document what worked, what failed, with data attached. It's creating institutional memory.
+
+INTERVIEWER: Describe how a typical day looks different now.
+
+PARTICIPANT: Less manual coordination, more strategic thinking. I used to spend hours chasing status updates. Now the dashboard shows bottlenecks automatically. The automation has gotten sophisticated—we have rules that escalate stuck tasks, notify stakeholders when dependencies are ready, even suggest resource reallocation based on workload heatmaps. I probably interact with the app less, but get more value? If that makes sense.
+
+INTERVIEWER: Have any technical issues persisted or been resolved?
+
+PARTICIPANT: The sync conflicts got better after the last update—they added a merge conflict tool with diff highlighting. The API rate limits are still there, but we've learned to batch operations during off-hours. New issue: the mobile app's push notifications are unreliable. Sometimes I get them, sometimes I don't. And there's a memory leak in the desktop app if you leave it running for days. Have to restart it weekly.
+
+INTERVIEWER: How has your comparison to previous tools changed?
+
+INTERVIEWER: How has your comparison to previous tools changed?
+
+PARTICIPANT: I don't even think about Trello anymore, honestly. It's like comparing a bicycle to a car—both get you somewhere, but one is for serious distance. What's surprised me is how it's replaced other tools too. We've phased out separate time-tracking and survey tools because the built-in features are good enough. The one gap: still need Google Slides for client presentations. The reporting is great internally, but not client-ready.
+
+INTERVIEWER: What have you learned or mastered that was challenging initially?
+
+PARTICIPANT: The formula fields—I'm writing pretty complex ones now. Like, calculating predicted campaign success scores based on historical data. Also, the API integration. I built a custom connector to our CRM that syncs lead data with campaign tasks. That was a game-changer. The permission system? Still hate it, but I've developed workarounds. Mostly I create "view-only" clones of projects for external sharing instead of wrestling with granular permissions.
+
+INTERVIEWER: What new problems has the app revealed or solved?
+
+PARTICIPANT: Revealed? How much time we wasted in status meetings. The data shows we've cut weekly syncs from 5 hours to 90 minutes. Solved? Cross-departmental handoffs. Sales would complain leads weren't followed up; now there's an automated handoff workflow. Also, it surfaced that our designer was overloaded while our copywriter had capacity—we wouldn't have noticed that without the workload visualization.
+
+INTERVIEWER: Based on a month of use, what would you change or add now?
+
+PARTICIPANT: Forecasting features. Like, if I schedule a campaign for June, predict the team's capacity based on current projects. Also, better integration with advertising platforms' APIs—pulling actual spend and conversion data automatically. And templates that aren't just static, but learn from our successes. Like, "Based on your high-performing campaigns, here's a suggested template for your next product launch."
+
+INTERVIEWER: Would your recommendation to colleagues be different now?
+
+PARTICIPANT: More confident, but with more nuanced advice. I'd say, "The first two weeks will feel like you're working for the app instead of it working for you. Push through that. By month two, it pays back that investment tenfold." I'd also recommend specific onboarding steps now—like, start with one project, master it, then scale. Don't try to migrate everything at once like we did. And definitely get buy-in from your team first; it fails if you're the only user.
+
+ 
