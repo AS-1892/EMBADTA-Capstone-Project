@@ -1,0 +1,1497 @@
+import streamlit as st
+import pandas as pd
+import json
+
+import os
+from datetime import datetime
+from pathlib import Path
+from pathlib import Path
+from openai_helper import (
+    analyze_transcripts,
+    suggest_codes_for_quote,
+    suggest_themes_from_codes,
+)
+
+
+
+@st.cache_data
+def load_participant_metadata():
+    return pd.read_csv("Data/participants_metadata.csv")
+
+
+metadata_df = load_participant_metadata()
+
+# Keep one row per participant (baseline info)
+participant_lookup = (
+    metadata_df.sort_values("interview_date")
+    .drop_duplicates("participant_id")
+    .set_index("participant_id")
+)
+from collections import Counter
+
+
+def analyze_theme_demographics(theme, participant_lookup):
+    genders = []
+    tech_levels = []
+
+    for quote in theme["supporting_quotes"]:
+        pid = quote["participant_id"]
+        if pid in participant_lookup.index:
+            person = participant_lookup.loc[pid]
+            genders.append(person["gender"])
+            tech_levels.append(person["tech_comfort"])
+
+    return {"gender_counts": Counter(genders), "tech_counts": Counter(tech_levels)}
+
+
+def find_missing_groups(theme_demo_counts, overall_values):
+    present = set(theme_demo_counts.keys())
+    overall = set(overall_values)
+    return list(overall - present)
+
+
+def load_all_transcripts(transcripts_folder="Data/transcripts"):
+    """
+    Reads all .txt files from the transcripts folder
+    and combines them into one text block.
+    """
+    all_text = []
+
+    transcript_path = Path(transcripts_folder)
+
+    for file in transcript_path.glob("*.txt"):
+        with open(file, "r", encoding="utf-8") as f:
+            content = f.read()
+            all_text.append(f"{file.stem}:\n{content}")
+
+    return "\n\n".join(all_text)
+
+
+# ======================
+# PAGE CONFIGURATION
+# ======================
+st.set_page_config(
+    page_title="Context Snapshot - EMBA Capstone",
+    page_icon="🎯",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ======================
+# APP BANNER (STREAMLIT-SAFE)
+# ======================
+from pathlib import Path
+
+BANNER_PATH = Path(__file__).parent / "assets" / "reflexive_ai_banner.png"
+
+st.markdown(
+    """
+    <style>
+    div[data-testid="stImage"] img {
+        max-height: 466px;
+        object-fit: cover;
+        border-radius: 8px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+st.image(
+    str(BANNER_PATH),
+    use_container_width=True
+)
+
+st.markdown("---")
+
+
+
+
+
+# ======================
+# SESSION STATE INITIALIZATION
+# ======================
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "Data Dashboard"
+if "analysis_results" not in st.session_state:
+    st.session_state.analysis_results = None
+if "themes" not in st.session_state:
+    st.session_state.themes = {}
+    
+
+if "ai_mode" not in st.session_state:
+    st.session_state.ai_mode = "live"  # default
+
+AI_CACHE_PATH = "Data/ai_familiarization_cached.json"    
+
+# ======================
+# CODEBOOK FINALIZATION STATE (NEW)
+# ======================
+if "codebook_finalized" not in st.session_state:
+    st.session_state.codebook_finalized = False
+
+
+# ======================
+# CODEBOOK STATE (NEW)
+# ======================
+if "codes" not in st.session_state:
+    st.session_state.codes = {}
+
+
+# ======================
+# DATA LOADING FUNCTIONS
+# ======================
+@st.cache_data
+def load_metadata():
+    """Load participant metadata from CSV"""
+    try:
+        if os.path.exists("data/participants_metadata.csv"):
+            df = pd.read_csv("data/participants_metadata.csv")
+            # Convert date columns if they exist
+            date_columns = ["interview_date"]
+            for col in date_columns:
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col], errors="coerce")
+            return df
+        else:
+            return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Error loading metadata: {str(e)}")
+        return pd.DataFrame()
+
+
+@st.cache_data
+def load_transcript_info():
+    """Get information about available transcripts"""
+    try:
+        if os.path.exists("data/transcripts"):
+            transcript_files = os.listdir("data/transcripts")
+            return [f for f in transcript_files if f.endswith(".txt")]
+        return []
+    except:
+        return []
+
+
+# ======================
+# LOAD DATA
+# ======================
+df = load_metadata()
+transcript_files = load_transcript_info()
+
+# ======================
+# SIDEBAR - NAVIGATION
+# ======================
+with st.sidebar:
+    st.markdown("### 🤖 AI Mode")
+    st.session_state.ai_mode = st.radio(
+        "AI execution mode",
+        ["live", "offline"],
+        help="Live = call OpenAI API. Offline = use cached results."
+    )
+    # ======================
+    # APP IDENTITY
+    # ======================
+    st.markdown("## 🤖 Reflexive AI Tool")
+    st.caption("An internal tool for AI-assisted qualitative research")
+    st.markdown("---")
+
+    # ======================
+    # RESEARCH WORKFLOW NAVIGATION
+    # ======================
+    st.subheader("🧭 Research Workflow")
+
+    main_page = st.radio(
+        "Main Stage",
+        [
+            "Study Setup & Data Context",
+            "Analysis & Interpretation",
+        ],
+        label_visibility="collapsed",
+    )
+
+    if main_page == "Analysis & Interpretation":
+        sub_page = st.radio(
+            "Analysis Stage",
+            [
+                "Analysis & Theme Construction",
+                "Reflexivity, Bias & Interpretation",
+            ],
+            label_visibility="collapsed",
+        )
+    else:
+        sub_page = None
+
+    st.markdown("---")
+
+    # ======================
+    # AUDIT TRAIL STATUS
+    # ======================
+    st.subheader("🧾 Audit Trail Status")
+
+    ai_actions = int(st.session_state.get("ai_familiarization_done", False)) + \
+                 int(st.session_state.get("ai_open_coding_done", False))
+
+    researcher_actions = 0
+    if "codes" in st.session_state:
+        researcher_actions += len(
+            [
+                c for c in st.session_state.codes.values()
+                if c.get("status") in ["confirmed", "rejected"]
+            ]
+        )
+
+    if "themes" in st.session_state:
+        researcher_actions += len(st.session_state.themes)
+
+    reflexive_done = bool(st.session_state.get("reflexive_notes"))
+
+    st.write(f"🤖 AI actions logged: **{ai_actions}**")
+    st.write(f"🧠 Researcher decisions: **{researcher_actions}**")
+    st.write(f"📝 Reflexive notes: **{'✔️ Added' if reflexive_done else '— Not added'}")
+
+    st.markdown("---")
+
+    # ======================
+    # QUICK ACTIONS
+    # ======================
+    st.subheader("⚡ Quick Actions")
+
+    if st.button("🔄 Refresh Data", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
+    if st.button("📥 Export Summary", use_container_width=True):
+        st.info("Export feature will be implemented next")
+
+    st.markdown("---")
+
+    # ======================
+    # EMBA CAPSTONE DETAILS
+    # ======================
+    st.subheader("🎓 EMBA Capstone")
+    st.caption("Akanksha Singh · EMBADTA24006")
+    st.caption("Advisor: Dr. Karthikeyan Balakumar")
+    st.caption("Digital Transformation & Analytics")
+
+
+# ======================
+# PAGE 1: STUDY SETUP & DATA CONTEXT
+# ======================
+
+if main_page == "Study Setup & Data Context":
+
+    st.header("📘 Study Setup & Data Context")
+    st.caption(
+        "This page establishes the study scope, data sources, and participant context. "
+        "No analysis or interpretation is performed here."
+    )
+
+    # ----------------------
+    # Study Inputs (Demo)
+    # ----------------------
+    st.subheader("📂 Study Inputs (Demonstration)")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.file_uploader(
+            "Upload Interview Transcripts",
+            type=["txt"],
+            disabled=True,
+            help="Prototype demonstration only. Synthetic data is used in this study."
+        )
+
+    with col2:
+        st.file_uploader(
+            "Upload Questionnaire / Topic Guide",
+            type=["pdf", "docx"],
+            disabled=True,
+            help="Prototype demonstration only. Shown to illustrate study setup."
+        )
+
+    st.info(
+        "ℹ️ Uploads are shown for methodological completeness. "
+        "This prototype operates on a fixed synthetic dataset."
+    )
+
+    st.markdown("---")
+
+    # ----------------------
+    # Dataset Overview
+    # ----------------------
+    st.subheader("📊 Dataset Overview")
+
+    if not df.empty:
+        metric_cols = st.columns(4)
+
+        with metric_cols[0]:
+            st.metric("Total Entries", len(df))
+
+        with metric_cols[1]:
+            st.metric("Participants", df["participant_id"].nunique())
+
+        with metric_cols[2]:
+            st.metric("Transcripts", len(transcript_files))
+
+        with metric_cols[3]:
+            if "session_number" in df.columns:
+                st.metric("Follow-up Sessions", len(df[df["session_number"] > 1]))
+            else:
+                st.metric("Follow-up Sessions", 0)
+
+    st.markdown("---")
+
+    # ----------------------
+    # Participant Demographics
+    # ----------------------
+    st.subheader("👥 Participant Demographics")
+
+    if not df.empty:
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if "gender" in df.columns:
+                st.markdown("**Gender Distribution**")
+                st.bar_chart(
+                    df["gender"]
+                    .dropna()
+                    .astype(str)
+                    .value_counts()
+                )
+
+        with col2:
+            if "tech_comfort" in df.columns:
+                st.markdown("**Tech Comfort Levels**")
+                st.bar_chart(
+                    df["tech_comfort"]
+                    .dropna()
+                    .astype(str)
+                    .value_counts()
+                )
+
+    st.markdown("---")
+
+    # ----------------------
+    # Data Quality & Context Notes
+    # ----------------------
+    st.subheader("🧾 Data Quality & Context Notes")
+
+    if not df.empty:
+        if "contradiction_flag" in df.columns:
+            contradictions = df[df["contradiction_flag"] == "Yes"]
+            if not contradictions.empty:
+                st.warning(
+                    f"⚠️ {len(contradictions)} entries show profile–response contradictions."
+                )
+            else:
+                st.success("✅ No profile–response contradictions detected.")
+
+        if "session_number" in df.columns:
+            followups = df[df["session_number"] > 1]
+            if not followups.empty:
+                st.info(f"ℹ️ {len(followups)} participants have follow-up sessions.")
+
+
+
+
+# ======================
+# PAGE 2: RESEARCH METHODOLOGY
+# ======================
+if False:
+
+
+    st.header("🔬 Qualitative Research Methodology")
+
+    # STUDY DESIGN
+    with st.expander("📐 Study Design Overview", expanded=True):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown(
+                """
+            ### **Research Questions**
+            1. How can AI tools preserve contextual richness in qualitative analysis?
+            2. What interface features enable effective human-AI collaboration?
+            3. Does context-preserving AI produce more trustworthy insights?
+            4. How can bias detection be integrated into research workflows?
+            
+            ### **Methodological Approach**
+            - **Design Science Research:** Build & evaluate a prototype
+            - **Comparative Analysis:** Three-condition experimental design
+            - **Mixed Methods:** Quantitative metrics + qualitative insights
+            """
+            )
+
+        with col2:
+            st.markdown(
+                """
+            ### **Dataset Characteristics**
+            - **Type:** Synthetic qualitative interviews
+            - **Size:** 20 participants × 1-2 sessions
+            - **Duration:** 30-45 minutes per interview
+            - **Format:** Text transcripts with metadata
+            
+            ### **Key Innovations**
+            - Quote-level traceability system
+            - Demographic-response alignment checks
+            - Temporal evolution tracking
+            - Bias detection dashboard
+            """
+            )
+
+    # INTERVIEW PROTOCOL
+    st.subheader("📋 Standardized Interview Protocol")
+
+    questions = [
+        (
+            "Onboarding Experience",
+            "Walk me through your first week with Productiva Pro. What was the setup process like?",
+            "Initial impressions, ease of setup, tutorial effectiveness",
+        ),
+        (
+            "Daily Usage Patterns",
+            "Describe a typical day using the app. Which features do you use most frequently and why?",
+            "Feature adoption, workflow integration, routine usage",
+        ),
+        (
+            "Technical Encounter",
+            "Have you encountered any technical issues or bugs? How did you resolve them?",
+            "Problem-solving, bug reporting, workaround development",
+        ),
+        (
+            "Comparative Analysis",
+            "How does Productiva Pro compare to productivity tools you've used previously?",
+            "Relative advantages, missing features, improvement areas",
+        ),
+        (
+            "Learning Curve",
+            "What has been most challenging to learn or use in the app?",
+            "Usability issues, complexity management, learning support needs",
+        ),
+        (
+            "Value Proposition",
+            "What specific problem does this app solve for you that wasn't solved before?",
+            "Pain point resolution, efficiency gains, value realization",
+        ),
+        (
+            "Improvement Suggestions",
+            "If you could change or add one thing to the app, what would it be and why?",
+            "Feature requests, design improvements, priority areas",
+        ),
+        (
+            "Recommendation Factors",
+            "Would you recommend this app to someone in your profession? What would you tell them about it?",
+            "Net promoter score, qualifying conditions, user segmentation",
+        ),
+    ]
+
+    for i, (theme, question, focus) in enumerate(questions, 1):
+        with st.expander(f"Q{i}: {theme}", expanded=(i == 1)):
+            st.markdown(f"**Interviewer Prompt:**")
+            st.info(f'"{question}"')
+            st.markdown(f"**Thematic Focus:** {focus}")
+            st.markdown(f"**Probing Techniques:**")
+            st.write("- 'Can you give me a specific example?'")
+            st.write("- 'Tell me more about that experience.'")
+            st.write("- 'How did that make you feel?'")
+            st.write("- 'What happened next?'")
+
+    # SAMPLING STRATEGY
+    st.subheader("🎯 Participant Sampling Strategy")
+
+    if not df.empty:
+        sampling_data = pd.DataFrame(
+            {
+                "Stratification Criteria": [
+                    "High Tech Comfort",
+                    "Medium Tech Comfort",
+                    "Low Tech Comfort",
+                    "Early Adopters/Innovators",
+                    "Early/Late Majority",
+                    "Laggards/Skeptics",
+                    "With Contradictions",
+                    "With Temporal Data (2 sessions)",
+                ],
+                "Count": [
+                    len(df[df["tech_comfort"] == "High"]),
+                    len(df[df["tech_comfort"] == "Medium"]),
+                    len(df[df["tech_comfort"] == "Low"]),
+                    len(
+                        df[
+                            df["segment"].str.contains(
+                                "Early Adopter|Innovator", case=False, na=False
+                            )
+                        ]
+                    ),
+                    len(
+                        df[
+                            df["segment"].str.contains(
+                                "Majority|Pragmatist", case=False, na=False
+                            )
+                        ]
+                    ),
+                    len(
+                        df[
+                            df["segment"].str.contains(
+                                "Laggard|Skeptic|Cautious", case=False, na=False
+                            )
+                        ]
+                    ),
+                    (
+                        len(df[df["contradiction_flag"] == "Yes"])
+                        if "contradiction_flag" in df.columns
+                        else 0
+                    ),
+                    (
+                        len(df[df["session_number"] > 1])
+                        if "session_number" in df.columns
+                        else 0
+                    ),
+                ],
+                "Purpose": [
+                    "Technical expertise perspective",
+                    "Average user experience",
+                    "Accessibility testing",
+                    "Innovation adoption patterns",
+                    "Mainstream usability",
+                    "Resistance factors",
+                    "Bias detection testing",
+                    "Longitudinal analysis",
+                ],
+            }
+        )
+
+        st.dataframe(sampling_data, use_container_width=True, hide_index=True)
+
+    # ETHICS STATEMENT
+    st.markdown("---")
+    with st.expander("🔒 Research Ethics & Limitations"):
+        st.markdown(
+            """
+        ### **Ethical Considerations**
+        
+        ✅ **Synthetic Data:** All interview data is artificially generated for methodology testing  
+        ✅ **No Human Subjects:** No actual interviews conducted; no IRB approval required  
+        ✅ **Privacy Protection:** No real personal identifiable information used  
+        ✅ **Transparency:** Clear methodology documentation and limitations acknowledgment  
+        ✅ **Bias Awareness:** Explicit attention to algorithmic bias detection and mitigation  
+        
+        ### **Methodological Limitations**
+        
+        ⚠️ **Synthetic Nature:** Responses may lack authentic emotional depth  
+        ⚠️ **Generalizability:** Findings limited to synthetic dataset characteristics  
+        ⚠️ **Scale:** Pilot study scope; larger validation needed for production use  
+        ⚠️ **Context Specificity:** Focused on productivity app adoption context  
+        
+        ### **Intended Use**
+        
+        This tool is designed for:
+        - **Methodology testing** of context preservation approaches
+        - **Prototype validation** of human-AI collaboration interfaces
+        - **Research workflow** enhancement exploration
+        - **EMBA capstone demonstration** of digital transformation principles
+        """
+        )
+
+# ======================
+# PAGE 3: ANALYSIS FRAMEWORK
+# ======================
+elif False:
+
+
+    st.header("🔍 Analysis & Coding Framework")
+
+    # TWO-COLUMN LAYOUT
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("🎯 Thematic Analysis Process")
+
+        steps = [
+            (
+                "1. Familiarization",
+                "Repeated reading of transcripts, noting initial ideas",
+            ),
+            ("2. Initial Coding", "Systematic data coding across entire dataset"),
+            ("3. Theme Development", "Collating codes into potential themes"),
+            ("4. Theme Review", "Checking themes against coded extracts and dataset"),
+            ("5. Theme Definition", "Refining specifics and scope of each theme"),
+            (
+                "6. Report Production",
+                "Selecting compelling extract examples, final analysis",
+            ),
+        ]
+
+        for step, description in steps:
+            with st.expander(step, expanded=(step == "1. Familiarization")):
+                st.write(description)
+
+        st.subheader("📚 Preliminary Codebook")
+
+        codebook = pd.DataFrame(
+            {
+                "Theme": [
+                    "Technical Implementation",
+                    "User Experience",
+                    "Adoption Barriers",
+                    "Value Proposition",
+                    "Comparative Assessment",
+                    "Recommendation Drivers",
+                ],
+                "Description": [
+                    "Discussions of technical features, architecture, bugs, performance",
+                    "Interface design, usability, learning curve, aesthetic considerations",
+                    "Obstacles to adoption, learning challenges, change resistance factors",
+                    "Perceived benefits, problem-solving capacity, efficiency gains",
+                    "Comparisons with previous/alternative tools, competitive positioning",
+                    "Factors influencing recommendation to peers and colleagues",
+                ],
+                "Example Codes": [
+                    "API limitations, sync issues, mobile stability, database performance",
+                    "UI complexity, navigation challenges, visual design, accessibility",
+                    "Training needs, feature overload, integration difficulties, cost concerns",
+                    "Time savings, collaboration benefits, workflow optimization, ROI",
+                    "Better/worse than X, missing features, improved aspects, trade-offs",
+                    "Specific use cases, qualifications, target user advice, warnings",
+                ],
+            }
+        )
+
+        st.dataframe(codebook, use_container_width=True, height=300)
+
+    with col2:
+        st.subheader("🔗 Context Preservation Framework")
+
+        st.markdown(
+            """
+        ### **Core Innovation: Quote-Level Traceability**
+        
+        **Traditional AI Analysis:**
+        - Themes extracted without source linking
+        - Context stripped during processing
+        - No demographic attribution
+        - Black-box insight generation
+        
+        **Context Snapshot Approach:**
+        - Every theme linked to specific quotes
+        - Each quote tied to participant demographics
+        - Full audit trail from insight → quote → participant
+        - Transparent, verifiable analysis
+        """
+        )
+
+        # Context layers visualization
+        st.markdown("### **Multi-Layer Context Preservation**")
+
+        context_layers = pd.DataFrame(
+            {
+                "Layer": [
+                    "Demographic Context",
+                    "Professional Context",
+                    "Temporal Context",
+                    "Situational Context",
+                    "Emotional Context",
+                    "Relational Context",
+                ],
+                "Elements": [
+                    "Age, gender, tech comfort, segment, occupation",
+                    "Previous tools, industry, role, experience level",
+                    "Interview date, session number, time of day, duration",
+                    "Recording quality, distractions, mood notes, tech issues",
+                    "Sentiment, frustration levels, enthusiasm, skepticism",
+                    "Interviewer-participant dynamics, rapport, openness",
+                ],
+                "Preservation Method": [
+                    "Metadata integration, automated tagging",
+                    "Occupational profiling, tool history tracking",
+                    "Timestamp logging, session sequencing",
+                    "Context notes, quality flags, environmental factors",
+                    "Sentiment analysis, emotion detection",
+                    "Interaction pattern recognition",
+                ],
+            }
+        )
+
+        st.dataframe(context_layers, use_container_width=True, height=300)
+
+        # BIAS DETECTION
+        st.subheader("⚠️ Bias Detection System")
+
+        bias_types = pd.DataFrame(
+            {
+                "Bias Type": [
+                    "Representation Bias",
+                    "Sentiment Skew",
+                    "Missing Voices",
+                    "Confirmation Bias",
+                    "Amplification Bias",
+                    "Contextual Bias",
+                ],
+                "Detection Method": [
+                    "Demographic segment over/under-representation in themes",
+                    "Emotional tone disproportionately attributed to groups",
+                    "Consistent absence of specific demographics from insights",
+                    "AI overweighting responses that confirm initial patterns",
+                    "Minority perspectives drowned out by majority views",
+                    "Cultural/situational factors ignored in interpretation",
+                ],
+                "Mitigation Strategy": [
+                    "Demographic balance alerts, representation dashboards",
+                    "Sentiment distribution analysis, tone balancing",
+                    "Missing segment flagging, proactive inclusion prompts",
+                    "Contradictory evidence highlighting, alternative framing",
+                    "Volume normalization, minority voice amplification",
+                    "Contextual factor integration, situational awareness",
+                ],
+            }
+        )
+
+        st.dataframe(bias_types, use_container_width=True, height=300)
+
+# ======================
+# PAGE 4: TESTING PROTOCOL
+# ======================
+elif False:
+
+
+    st.header("🧪 Comparative Testing Protocol")
+
+    # THREE-CONDITION DESIGN
+    st.subheader("🔬 Three-Condition Experimental Design")
+
+    conditions = pd.DataFrame(
+        {
+            "Condition": [
+                "Group A: Human Analyst Only",
+                "Group B: AI-Only Analysis",
+                "Group C: Context Snapshot Tool",
+            ],
+            "Description": [
+                "Traditional qualitative coding without AI assistance. Serves as baseline for comparison.",
+                "Raw ChatGPT/GPT-4 analysis with standard prompts. Tests context loss in current AI tools.",
+                "Human+AI collaboration with full context preservation features. Tests our innovation.",
+            ],
+            "Sample Size": [
+                "n=2 researchers × 5 transcripts = 10 analyses",
+                "AI analyzes 5 transcripts = 5 analyses",
+                "n=2 researchers × 5 transcripts = 10 analyses",
+            ],
+            "Key Characteristics": [
+                "Manual coding, full control, time-intensive, high transparency",
+                "Automated, fast, low transparency, context loss risk",
+                "Semi-automated, balanced speed/quality, full transparency, context preserved",
+            ],
+        }
+    )
+
+    st.dataframe(conditions, use_container_width=True, hide_index=True)
+
+    # EVALUATION METRICS
+    st.subheader("📊 Evaluation Metrics")
+
+    metrics = pd.DataFrame(
+        {
+            "Metric": [
+                "Evidence Citation Rate",
+                "Source Traceability",
+                "Time Efficiency",
+                "Perceived Confidence",
+                "Bias Detection Accuracy",
+                "System Usability",
+                "Thematic Comprehensiveness",
+                "Context Preservation Score",
+            ],
+            "Definition": [
+                "Number of specific, attributable quotes per generated insight",
+                "Ability to trace any insight back to exact participant and context",
+                "Time required to analyze one transcript (minutes)",
+                "Researcher confidence in findings (1-5 Likert scale)",
+                "Percentage of synthetic biases correctly detected and flagged",
+                "Ease of use measured via System Usability Scale (SUS)",
+                "Percentage of manually identified themes also found by system",
+                "Composite score of demographic, temporal, situational context retention",
+            ],
+            "Measurement Method": [
+                "Count: (quotes cited) / (insights generated)",
+                'Test: "Show me where this insight came from" success rate',
+                "Timed analysis sessions with start/end recording",
+                "Post-task survey with 5-point scale",
+                "Manual validation against known contradiction flags",
+                "Standard SUS questionnaire (10 items, 5-point scales)",
+                "Comparison with gold-standard human coding",
+                "Multi-factor scoring based on context layer preservation",
+            ],
+            "Success Threshold": [
+                "Group C ≥ 50% higher than Group B",
+                "Group C > 80%, Group A > 90%, Group B < 30%",
+                "Group C ≤ 2× Group A time",
+                "Group C score ≥ 4.0/5.0",
+                "≥ 90% detection rate",
+                "SUS score ≥ 70/100",
+                "≥ 85% overlap with human coding",
+                "≥ 90% overall context preservation",
+            ],
+        }
+    )
+
+    st.dataframe(metrics, use_container_width=True, height=400)
+
+    # HYPOTHESES
+    st.subheader("🎯 Research Hypotheses")
+
+    hypotheses = [
+        "H1: Context Snapshot will produce insights with 50% higher evidence citation rates than raw AI analysis.",
+        "H2: Source traceability will be >80% successful with Context Snapshot vs <30% with raw AI tools.",
+        "H3: Analysis time with Context Snapshot will be ≤2× human-only time while maintaining higher quality.",
+        "H4: Perceived confidence will be highest with Context Snapshot due to auditability and transparency.",
+        "H5: The bias detection system will identify ≥90% of synthetic contradictions in the dataset.",
+        "H6: System Usability Scale scores will be ≥70 for Context Snapshot, indicating good usability.",
+        "H7: Context preservation will not significantly increase cognitive load for researchers.",
+        "H8: Human+AI collaboration will produce more nuanced insights than either approach alone.",
+    ]
+
+    for hypo in hypotheses:
+        st.write(f"✅ **{hypo}**")
+
+
+
+# ======================
+# FOOTER (PAGE 1 ONLY)
+# ======================
+if main_page == "Study Setup & Data Context":
+
+    st.markdown("---")
+    footer_col1, footer_col2, footer_col3 = st.columns(3)
+
+    with footer_col1:
+        st.caption("**Executive MBA Program**")
+        st.caption("Digital Transformation & Analytics")
+
+    with footer_col2:
+        st.caption("**Capstone Project**")
+        st.caption("Context Preservation in AI-Assisted Research")
+
+    with footer_col3:
+        st.caption("**Student:** Akanksha Singh")
+        st.caption("**ID:** EMBADTA24006")
+
+    st.markdown("---")
+    st.caption("© 2024 Context Snapshot Project | Developed for Academic Research Purposes")
+
+
+# ==================================================
+# PAGE 2: ANALYSIS & THEME CONSTRUCTION
+# ==================================================
+if main_page == "Analysis & Interpretation" and sub_page == "Analysis & Theme Construction":
+
+    # --------------------------------------------------
+    # STEP 1 — AI FAMILIARIZATION
+    # --------------------------------------------------
+    st.header("Step 1 · AI Familiarization (Read-only)")
+    st.caption(
+        "AI performs a one-time familiarization pass on transcripts. "
+        "This output is NOT used for coding or theme construction."
+    )
+
+    if "ai_familiarization_done" not in st.session_state:
+        st.session_state.ai_familiarization_done = False
+
+    if not st.session_state.ai_familiarization_done:
+        use_sample_data = st.checkbox(
+            "Use sample transcripts (safe test mode)",
+            value=True,
+        )
+
+        if st.button("Run AI Familiarization"):
+            with st.spinner("AI is reading transcripts..."):
+                text = (
+                    """
+P001: I found the app confusing at first.
+P002: After some time, it became easier to use.
+P003: I still struggle to find key features.
+"""
+                    if use_sample_data
+                    else load_all_transcripts()
+                )
+
+                raw_output = analyze_transcripts(text)
+                st.session_state.parsed_output = json.loads(raw_output)
+                st.session_state.ai_familiarization_done = True
+                st.success("AI familiarization completed.")
+    else:
+        st.success("AI familiarization completed.")
+
+    st.markdown("---")
+
+    # --------------------------------------------------
+    # STEP 2 — OPEN CODING
+    # --------------------------------------------------
+    st.header("Step 2 · Open Coding (AI-assisted, Researcher-controlled)")
+
+    if "parsed_output" not in st.session_state:
+        st.info("🔒 Complete Step 1 to unlock open coding.")
+    else:
+        if "codes" not in st.session_state:
+            st.session_state.codes = {}
+
+        if "ai_open_coding_done" not in st.session_state:
+            st.session_state.ai_open_coding_done = False
+
+        if st.button("Run / Re-run AI Open Coding"):
+            st.session_state.codes = {}
+            st.session_state.ai_open_coding_done = False
+            st.rerun()
+
+        if not st.session_state.ai_open_coding_done:
+            with st.spinner("AI is suggesting open codes..."):
+                for theme in st.session_state.parsed_output["themes"]:
+                    for quote in theme["supporting_quotes"]:
+                        try:
+                            codes = suggest_codes_for_quote(quote["quote_text"])
+
+                            for code_name in codes:
+                                existing = next(
+                                    (
+                                        cid
+                                        for cid, c in st.session_state.codes.items()
+                                        if c["code_name"] == code_name
+                                    ),
+                                    None,
+                                )
+
+                                if existing:
+                                    st.session_state.codes[existing]["linked_quotes"].append(
+                                        quote["quote_id"]
+                                    )
+                                else:
+                                    cid = f"C{len(st.session_state.codes)+1:02d}"
+                                    st.session_state.codes[cid] = {
+                                        "code_id": cid,
+                                        "code_name": code_name,
+                                        "status": "draft",
+                                        "created_by": "AI",
+                                        "linked_quotes": [quote["quote_id"]],
+                                    }
+
+                        except Exception as e:
+                            st.warning(f"Code generation skipped: {e}")
+
+            st.session_state.ai_open_coding_done = True
+            st.success(f"Draft open codes generated: {len(st.session_state.codes)}")
+
+    st.markdown("---")
+
+    # --------------------------------------------------
+    # STEP 2A — RESEARCHER REVIEW
+    # --------------------------------------------------
+    st.subheader("🧠 Researcher Review: Open Codes")
+
+    if not st.session_state.get("codes"):
+        st.info("No open codes available yet.")
+    else:
+        if "codebook_finalized" not in st.session_state:
+            st.session_state.codebook_finalized = False
+
+        for cid, code in st.session_state.codes.items():
+            st.markdown(f"### 🏷️ {code['code_name']}")
+            st.caption(
+                f"Status: {code['status']} · "
+                f"Quotes linked: {len(code['linked_quotes'])}"
+            )
+
+            with st.expander("📌 View supporting participant statements"):
+                for qid in code["linked_quotes"]:
+                    for t in st.session_state.parsed_output["themes"]:
+                        for q in t["supporting_quotes"]:
+                            if q["quote_id"] == qid:
+                                st.markdown(
+                                    f"""
+**Participant:** `{q['participant_id']}`  
+> {q['quote_text']}
+"""
+                                )
+
+            col1, col2, col3 = st.columns(3)
+
+            if not st.session_state.codebook_finalized:
+                with col1:
+                    if st.button("Accept", key=f"a_{cid}"):
+                        code["status"] = "confirmed"
+                        st.success("Code confirmed.")
+                        st.rerun()
+
+                with col2:
+                    new_name = st.text_input(
+                        "Rename",
+                        value=code["code_name"],
+                        key=f"r_{cid}",
+                    )
+                    if new_name != code["code_name"]:
+                        code["code_name"] = new_name
+                        st.rerun()
+
+                with col3:
+                    if st.button("Reject", key=f"x_{cid}"):
+                        code["status"] = "rejected"
+                        st.warning("Code rejected.")
+                        st.rerun()
+
+            st.markdown("---")
+
+    if not st.session_state.codebook_finalized:
+        if st.button("🔒 Finalize Codebook"):
+            st.session_state.codebook_finalized = True
+            st.success("Codebook finalized.")
+            st.rerun()
+    else:
+        st.info("🔒 Codebook finalized.")
+
+    st.markdown("---")
+
+    # --------------------------------------------------
+    # STEP 3 — AI THEME SUGGESTIONS
+    # --------------------------------------------------
+    st.header("Step 3 · AI-Suggested Theme Candidates")
+
+    if not st.session_state.codebook_finalized:
+        st.info("🔒 Finalize codebook to unlock theme suggestions.")
+    else:
+        if "themes" not in st.session_state:
+            st.session_state.themes = {}
+
+        if "ai_theme_suggestions" not in st.session_state:
+            with st.spinner("AI is suggesting themes..."):
+                st.session_state.ai_theme_suggestions = suggest_themes_from_codes(
+                    st.session_state.codes
+                )
+
+        for i, t in enumerate(
+            st.session_state.ai_theme_suggestions["suggested_themes"], 1
+        ):
+            st.markdown(f"### 💡 AI Theme {i}")
+            name = st.text_input("Theme name", t["theme_name"], key=f"t{i}")
+            st.write(t["rationale"])
+            st.caption("Codes: " + ", ".join(t["codes_included"]))
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                if st.button("Accept Theme", key=f"ta{i}"):
+                    tid = f"T{len(st.session_state.themes)+1:02d}"
+                    st.session_state.themes[tid] = {
+                        "theme_name": name,
+                        "description": t["rationale"],
+                        "codes": t["codes_included"],
+                        "created_by": "AI → researcher",
+                    }
+                    st.success("Theme accepted.")
+                    st.rerun()
+
+            with col2:
+                if st.button("Reject Theme", key=f"tr{i}"):
+                    st.warning("Theme rejected.")
+
+
+
+    # ==================================================
+    # STEP 4 · MANUAL THEME BUILDER (RESEARCHER-LED)
+    # ==================================================
+    st.markdown("---")
+    st.header("Step 4 · Theme Builder (Researcher-led)")
+
+    st.caption(
+        "Manually construct themes from confirmed codes. "
+        "This step does NOT rely on AI and always remains available."
+    )
+
+    # Gate: codebook must be finalized
+    if not st.session_state.codebook_finalized:
+        st.warning("Finalize the codebook to begin theme construction.")
+    else:
+        # Get confirmed codes only
+        confirmed_codes = {
+            cid: c
+            for cid, c in st.session_state.codes.items()
+            if c["status"] == "confirmed"
+        }
+
+        if not confirmed_codes:
+            st.info("No confirmed codes available yet.")
+        else:
+            st.subheader("➕ Create a New Theme")
+
+            theme_name = st.text_input("Theme name", key="manual_theme_name")
+            theme_description = st.text_area(
+                "Theme description (what does this theme capture?)",
+                key="manual_theme_desc"
+            )
+
+            selected_codes = st.multiselect(
+                "Select codes to include:",
+                options=list(confirmed_codes.keys()),
+                format_func=lambda cid: confirmed_codes[cid]["code_name"],
+                key="manual_theme_codes"
+            )
+
+            if st.button("Add Theme"):
+                if not theme_name or not selected_codes:
+                    st.warning("Theme name and at least one code are required.")
+                else:
+                    theme_id = f"T{len(st.session_state.themes)+1:02d}"
+                    st.session_state.themes[theme_id] = {
+                        "theme_name": theme_name,
+                        "description": theme_description,
+                        "codes": selected_codes,
+                        "created_by": "researcher",
+                    }
+                    st.success(f"Theme '{theme_name}' created.")
+
+            st.markdown("---")
+            st.subheader("📚 Current Themes")
+
+            if st.session_state.themes:
+                for tid, theme in st.session_state.themes.items():
+                    st.markdown(f"### 🔹 {theme['theme_name']}")
+                    st.write(theme["description"])
+                    st.caption(
+                        "Codes: "
+                        + ", ".join(
+                            st.session_state.codes[cid]["code_name"]
+                            for cid in theme["codes"]
+                        )
+                    )
+            else:
+                st.info("No themes created yet.")
+
+    # ==================================================
+    # REFLEXIVE AUDIT MODE — SEPARATOR
+    # ==================================================
+    st.markdown("---")
+
+    st.markdown(
+        """
+        <div style="padding:16px;border-radius:8px;background-color:#f5f7fa;">
+            <h3 style="margin-bottom:8px;">🧭 Reflexive Audit Panel</h3>
+            <p style="margin:0;">
+            You are now entering <strong>Reflexive Audit Mode</strong>.<br><br>
+            This section evaluates <strong>finalized themes</strong> for representation,
+            bias signals, contradictions, and researcher influence.
+            <br><br>
+            No new codes or themes are generated below.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown("---")
+
+    # ==================================================
+    # 4.1 REPRESENTATION & MISSING VOICES
+    # ==================================================
+    st.subheader("👥 Representation & Missing Voices")
+
+    # Panel visibility rules
+    if not st.session_state.get("codebook_finalized") or not st.session_state.get("themes"):
+        st.info(
+            "🔒 Themes are not finalized yet.\n\n"
+            "This section will activate once themes are finalized, "
+            "so representation can be assessed against final analytic decisions."
+        )
+    else:
+        st.caption(
+            "This section examines which participant groups are represented "
+            "or absent across finalized themes."
+        )
+
+        # Overall participant distributions
+        overall_gender = participant_lookup["gender"].value_counts()
+        overall_tech = participant_lookup["tech_comfort"].value_counts()
+
+        st.markdown("**Overall Participant Distribution**")
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            st.markdown("Gender")
+            st.bar_chart(overall_gender)
+
+        with col_b:
+            st.markdown("Tech Comfort")
+            st.bar_chart(overall_tech)
+
+        st.markdown("---")
+        st.markdown("### Theme-level Representation Checks")
+
+        # Iterate through finalized themes
+        for theme_id, theme in st.session_state.themes.items():
+
+            st.markdown(f"#### 🔹 {theme['theme_name']}")
+
+            theme_genders = []
+            theme_tech = []
+
+            # Collect participants linked to this theme via codes
+            for code_id in theme["codes"]:
+                linked_quotes = st.session_state.codes[code_id]["linked_quotes"]
+
+                for qid in linked_quotes:
+                    for t in st.session_state.parsed_output["themes"]:
+                        for quote in t["supporting_quotes"]:
+                            if quote["quote_id"] == qid:
+                                pid = quote["participant_id"]
+                                if pid in participant_lookup.index:
+                                    theme_genders.append(participant_lookup.loc[pid]["gender"])
+                                    theme_tech.append(participant_lookup.loc[pid]["tech_comfort"])
+
+            theme_gender_counts = pd.Series(theme_genders).value_counts()
+            theme_tech_counts = pd.Series(theme_tech).value_counts()
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("Gender representation")
+                if not theme_gender_counts.empty:
+                    st.bar_chart(theme_gender_counts)
+                else:
+                    st.warning("No gender data linked to this theme.")
+
+            with col2:
+                st.markdown("Tech comfort representation")
+                if not theme_tech_counts.empty:
+                    st.bar_chart(theme_tech_counts)
+                else:
+                    st.warning("No tech-comfort data linked to this theme.")
+
+            # Missing voices
+            missing_gender = set(overall_gender.index) - set(theme_gender_counts.index)
+            missing_tech = set(overall_tech.index) - set(theme_tech_counts.index)
+
+            if missing_gender or missing_tech:
+                st.warning(
+                    f"⚠️ Missing voices detected.\n\n"
+                    f"Gender missing: {', '.join(missing_gender) if missing_gender else 'None'}\n\n"
+                    f"Tech comfort missing: {', '.join(missing_tech) if missing_tech else 'None'}"
+                )
+            else:
+                st.success("✅ All major participant groups are represented in this theme.")
+
+            st.markdown("---")
+
+    # ==================================================
+    # 4.2 AI vs RESEARCHER INFLUENCE CHECK
+    # ==================================================
+    st.subheader("🤝 AI vs Researcher Influence Check")
+
+    # Visibility / lock rule
+    if not st.session_state.get("codebook_finalized") or not st.session_state.get("themes"):
+        st.info(
+            "🔒 Themes are not finalized yet.\n\n"
+            "This section will activate once themes are finalized, "
+            "to assess the balance between AI suggestions and researcher decisions."
+        )
+    else:
+        st.caption(
+            "This section compares AI-suggested themes with researcher-constructed themes "
+            "to surface potential AI influence or divergence."
+        )
+
+        # --- Prepare AI theme names (if available) ---
+        ai_theme_names = set()
+        if "ai_theme_suggestions" in st.session_state:
+            ai_theme_names = {
+                t["theme_name"].lower()
+                for t in st.session_state.ai_theme_suggestions.get("suggested_themes", [])
+            }
+
+        researcher_theme_names = {
+            theme["theme_name"].lower()
+            for theme in st.session_state.themes.values()
+        }
+
+        # --- Overlap analysis ---
+        overlap = ai_theme_names.intersection(researcher_theme_names)
+        researcher_only = researcher_theme_names - ai_theme_names
+        ai_only = ai_theme_names - researcher_theme_names
+
+        # --- Summary metrics ---
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("AI-suggested themes", len(ai_theme_names))
+
+        with col2:
+            st.metric("Researcher themes", len(researcher_theme_names))
+
+        with col3:
+            st.metric("Direct overlap", len(overlap))
+
+        st.markdown("---")
+
+        # --- Interpretation blocks ---
+        if overlap:
+            st.success(
+                f"✅ **Overlap detected** ({len(overlap)} themes).\n\n"
+                "Some researcher themes align closely with AI-suggested candidates, "
+                "indicating convergence."
+            )
+            st.write("Overlapping themes:")
+            for name in overlap:
+                st.write(f"- {name.title()}")
+
+        if researcher_only:
+            st.info(
+                f"🧠 **Researcher-led themes** ({len(researcher_only)}).\n\n"
+                "These themes were constructed without direct AI counterparts, "
+                "suggesting human-led analytic contribution."
+            )
+            for name in researcher_only:
+                st.write(f"- {name.title()}")
+
+        if ai_only:
+            st.warning(
+                f"🤖 **AI-only suggestions not adopted** ({len(ai_only)}).\n\n"
+                "These AI-suggested themes were not taken forward by the researcher, "
+                "indicating active human override."
+            )
+            for name in ai_only:
+                st.write(f"- {name.title()}")
+
+        if not overlap and not ai_only:
+            st.success(
+                "✅ No strong AI influence detected.\n\n"
+                "Researcher themes show clear independence from AI-suggested structures."
+            )
+    # ==================================================
+    # 4.3 CONTRADICTIONS & TENSION SIGNALS
+    # ==================================================
+    st.subheader("⚖️ Contradictions & Tension Signals")
+
+    # Visibility / lock rule
+    if not st.session_state.get("codebook_finalized") or not st.session_state.get("themes"):
+        st.info(
+            "🔒 Themes are not finalized yet.\n\n"
+            "This section will activate once finalized themes are available, "
+            "to surface internal tensions and contradictory evidence."
+        )
+    else:
+        st.caption(
+            "This section highlights tensions, contradictions, or misalignments "
+            "between participant profiles, sentiments, and thematic patterns."
+        )
+
+        # --- Aggregate contradiction signals from metadata ---
+        contradiction_count = 0
+        total_quotes = 0
+
+        for theme in st.session_state.themes.values():
+            for cid in theme["codes"]:
+                for qid in st.session_state.codes[cid]["linked_quotes"]:
+                    total_quotes += 1
+
+                    # lookup contradiction flag via participant metadata
+                    pid = None
+                    for t in st.session_state.parsed_output["themes"]:
+                        for q in t["supporting_quotes"]:
+                            if q["quote_id"] == qid:
+                                pid = q["participant_id"]
+
+                    if pid and pid in participant_lookup.index:
+                        if (
+                            "contradiction_flag" in participant_lookup.columns
+                            and participant_lookup.loc[pid]["contradiction_flag"] == "Yes"
+                        ):
+                            contradiction_count += 1
+
+        # --- Metrics ---
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.metric("Contradictory signals detected", contradiction_count)
+
+        with col2:
+            rate = (contradiction_count / total_quotes * 100) if total_quotes else 0
+            st.metric("Contradiction rate", f"{rate:.1f}%")
+
+        st.markdown("---")
+
+        # --- Interpretive guidance ---
+        if contradiction_count == 0:
+            st.success(
+                "✅ No strong contradiction signals detected.\n\n"
+                "Participant responses are broadly aligned with profile metadata "
+                "and thematic structure."
+            )
+
+        elif rate < 20:
+            st.info(
+                "🧩 **Low-level tensions detected.**\n\n"
+                "Some contradictions appear, but they do not dominate the dataset. "
+                "These may indicate nuanced or transitional experiences."
+            )
+
+        else:
+            st.warning(
+                "⚠️ **Significant tension signals detected.**\n\n"
+                "A substantial portion of coded material shows contradictions "
+                "between participant profiles and expressed experiences. "
+                "These tensions warrant deeper interpretive attention."
+            )
+
+        # --- Reflexive prompt ---
+        st.markdown("**Reflexive prompt for the researcher:**")
+        st.write(
+            "- Are these contradictions analytically meaningful or artefacts of the dataset?\n"
+            "- Do they point to latent sub-themes or boundary conditions?\n"
+            "- Were any perspectives systematically marginalized or over-amplified?"
+        )
+    # ==================================================
+    # 4.4 RESEARCHER REFLEXIVE NOTES
+    # ==================================================
+    st.subheader("📝 Researcher Reflexive Notes")
+
+    # Visibility / lock rule
+    if not st.session_state.get("codebook_finalized") or not st.session_state.get("themes"):
+        st.info(
+            "🔒 Themes are not finalized yet.\n\n"
+            "Researcher reflexive notes can be added once final themes are available, "
+            "to support transparent and accountable interpretation."
+        )
+    else:
+        st.caption(
+            "This space is reserved for the researcher’s reflexive observations, "
+            "assumptions, uncertainties, and analytic decisions made during interpretation."
+        )
+
+        # Initialize storage
+        if "reflexive_notes" not in st.session_state:
+            st.session_state.reflexive_notes = ""
+
+        # Text input
+        notes = st.text_area(
+            "Reflexive notes (visible only to the researcher):",
+            value=st.session_state.reflexive_notes,
+            height=200,
+            placeholder=(
+                "Examples:\n"
+                "- Assumptions I brought into this analysis\n"
+                "- Moments of uncertainty or interpretive difficulty\n"
+                "- How AI suggestions influenced (or did not influence) my thinking\n"
+                "- Decisions made to privilege or de-prioritize certain themes\n"
+            ),
+        )
+
+        # Save notes
+        if notes != st.session_state.reflexive_notes:
+            st.session_state.reflexive_notes = notes
+            st.success("Reflexive notes saved.")
+
+        st.markdown("---")
+
+        # Reflexive prompts (non-interactive guidance)
+        st.markdown("**Suggested reflexive prompts:**")
+        st.write(
+            "- Where did I agree or disagree with AI-generated suggestions?\n"
+            "- Which voices felt most salient, and which felt distant?\n"
+            "- How might my background, expectations, or goals shape these interpretations?\n"
+            "- What alternative readings of the data remain plausible?"
+        )
